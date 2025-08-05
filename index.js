@@ -2,6 +2,11 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const express = require('express');
+
+// Initialize Express app
+const app = express();
+const PORT = process.env.PORT || 3000;
 
 // Configuration
 const config = {
@@ -69,8 +74,8 @@ async function sendStartupMessage() {
 
         const channelList = config.telegram.channels.map(ch => ch.name).join(', ');
         const embed = new EmbedBuilder()
-            .setTitle('🤖 Telegram-Discord Bridge')
-            .setDescription(`Bridge is now online!\n📢 Monitoring: ${channelList}`)
+            .setTitle('🤖 KlaxyBot')
+            .setDescription(`Bot is now online!\n📢 Monitoring: ${channelList}`)
             .setColor(0x00ff00)
             .setTimestamp()
             .setFooter({ text: 'via KlaxyBot' });
@@ -157,7 +162,7 @@ async function startBridge() {
 
         await discordClient.login(config.discord.token);
 
-        console.log('🎉 KlaxyBot is running! Monitoring for new messages...');
+        console.log('🎉 Bridge is running! Monitoring for new messages...');
 
         // Keep the process running
         process.on('SIGINT', async () => {
@@ -171,6 +176,24 @@ async function startBridge() {
         process.exit(1);
     }
 }
+
+// Web server routes
+app.get('/', (req, res) => {
+    res.json({
+        status: 'online',
+        message: 'KlaxyBot is running',
+        monitoring: config.telegram.channels.map(ch => ch.name)
+    });
+});
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'healthy' });
+});
+
+// Start web server
+app.listen(PORT, () => {
+    console.log(`🌐 Web server running on port ${PORT}`);
+});
 
 // Check if required environment variables are set
 const requiredEnvVars = [
@@ -187,4 +210,4 @@ if (missingVars.length > 0) {
 }
 
 // Start the bridge
-startBridge();
+startBridge(); 
