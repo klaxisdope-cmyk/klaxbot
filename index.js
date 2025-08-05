@@ -6,7 +6,10 @@ const cheerio = require('cheerio');
 // Configuration
 const config = {
     telegram: {
-        channelId: '@Rainbet_Bonus',
+        channels: [
+            { id: '@Rainbet_Bonus', name: 'Rainbet Bonus' },
+            { id: '@Rainbet_Vip', name: 'Rainbet VIP' }
+        ],
         baseUrl: 'https://t.me'
     },
     discord: {
@@ -24,11 +27,14 @@ const discordClient = new Client({
     ]
 });
 
-// Store last message to avoid duplicates
-let lastMessageHash = '';
+// Store last messages to avoid duplicates
+let lastMessages = {
+    '@Rainbet_Bonus': '',
+    '@Rainbet_Vip': ''
+};
 
 // Function to send message to Discord
-async function sendToDiscord(message, username = 'Telegram Channel') {
+async function sendToDiscord(message, channelName = 'Telegram Channel') {
     try {
         const channel = discordClient.channels.cache.get(config.discord.channelId);
         if (!channel) {
@@ -37,26 +43,26 @@ async function sendToDiscord(message, username = 'Telegram Channel') {
         }
 
         const embed = new EmbedBuilder()
-            .setTitle(`📢 Message from ${username}`)
+            .setTitle(`📢 Message from ${channelName}`)
             .setDescription(message)
             .setColor(0x00ff00)
             .setTimestamp()
-            .setFooter({ text: 'via Telegram Bridge' });
+            .setFooter({ text: 'via KlaxyBot' });
 
         await channel.send({ embeds: [embed] });
-        console.log(`✅ Message sent to Discord: ${message.substring(0, 50)}...`);
+        console.log(`✅ Message sent to Discord from ${channelName}: ${message.substring(0, 50)}...`);
     } catch (error) {
         console.error('❌ Error sending to Discord:', error.message);
     }
 }
 
-// Function to scrape messages from public Telegram channel
-async function scrapeTelegramMessages() {
+// Function to scrape messages from a single Telegram channel
+async function scrapeTelegramChannel(channelConfig) {
     try {
-        console.log('📡 Checking for new messages from Telegram...');
+        console.log(`📡 Checking ${channelConfig.name}...`);
         
         // Scrape from t.me
-        const channelUrl = `${config.telegram.baseUrl}/${config.telegram.channelId.replace('@', '')}`;
+        const channelUrl = `${config.telegram.baseUrl}/${channelConfig.id.replace('@', '')}`;
         
         const response = await axios.get(channelUrl, {
             headers: {
@@ -73,10 +79,27 @@ async function scrapeTelegramMessages() {
             const latestMessage = messages.last().text().trim();
             const messageHash = Buffer.from(latestMessage).toString('base64').substring(0, 10);
             
-            if (messageHash !== lastMessageHash && latestMessage.length > 0) {
-                lastMessageHash = messageHash;
-                await sendToDiscord(latestMessage, config.telegram.channelId);
+            if (messageHash !== lastMessages[channelConfig.id] && latestMessage.length > 0) {
+                lastMessages[channelConfig.id] = messageHash;
+                await sendToDiscord(latestMessage, channelConfig.name);
             }
+        }
+        
+    } catch (error) {
+        console.error(`❌ Error scraping ${channelConfig.name}:`, error.message);
+    }
+}
+
+// Function to scrape messages from all Telegram channels
+async function scrapeAllTelegramChannels() {
+    try {
+        console.log('📡 Checking for new messages from Telegram channels...');
+        
+        // Check each channel
+        for (const channel of config.telegram.channels) {
+            await scrapeTelegramChannel(channel);
+            // Small delay between requests to be respectful
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
         
     } catch (error) {
@@ -85,14 +108,17 @@ async function scrapeTelegramMessages() {
         // Fallback: send a status message
         const now = new Date();
         const timeString = now.toLocaleTimeString();
-        await sendToDiscord(`🔄 Bridge is running - Last check: ${timeString}`, 'System');
+        await sendToDiscord(`🔄 KlaxyBot is running - Last check: ${timeString}`, 'System');
     }
 }
 
 // Main function
 async function startBridge() {
-    console.log('🚀 Starting Telegram-Discord Bridge...');
-    console.log('📢 Monitoring: @Rainbet_Bonus');
+    console.log('🚀 Starting KlaxBot...');
+    console.log('📢 Monitoring channels:');
+    config.telegram.channels.forEach(channel => {
+        console.log(`   - ${channel.name} (${channel.id})`);
+    });
 
     try {
         // Start Discord client
@@ -100,10 +126,11 @@ async function startBridge() {
             console.log(`✅ Discord bot logged in as ${discordClient.user.tag}`);
             
             // Send a startup message
-            sendToDiscord('🤖 Telegram-Discord Bridge is now online!\n📢 Monitoring: @Rainbet_Bonus', 'System');
+            const channelList = config.telegram.channels.map(ch => ch.name).join(', ');
+            sendToDiscord(`🤖 KlaxyBot is now online!\n📢 Monitoring: ${channelList}`, 'System');
             
             // Start checking for messages every 2 minutes
-            setInterval(scrapeTelegramMessages, 120000);
+            setInterval(scrapeAllTelegramChannels, 120000);
         });
 
         await discordClient.login(config.discord.token);
@@ -138,4 +165,4 @@ if (missingVars.length > 0) {
 }
 
 // Start the bridge
-startBridge(); 
+startBridge();
