@@ -33,6 +33,9 @@ let lastMessages = {
     '@Rainbet_Vip': ''
 };
 
+// Track if startup message was sent
+let startupMessageSent = false;
+
 // Function to send message to Discord
 async function sendToDiscord(message, channelName = 'Telegram Channel') {
     try {
@@ -53,6 +56,30 @@ async function sendToDiscord(message, channelName = 'Telegram Channel') {
         console.log(`✅ Message sent to Discord from ${channelName}: ${message.substring(0, 50)}...`);
     } catch (error) {
         console.error('❌ Error sending to Discord:', error.message);
+    }
+}
+
+// Function to send startup message (only once)
+async function sendStartupMessage() {
+    if (startupMessageSent) return;
+    
+    try {
+        const channel = discordClient.channels.cache.get(config.discord.channelId);
+        if (!channel) return;
+
+        const channelList = config.telegram.channels.map(ch => ch.name).join(', ');
+        const embed = new EmbedBuilder()
+            .setTitle('🤖 Telegram-Discord Bridge')
+            .setDescription(`Bridge is now online!\n📢 Monitoring: ${channelList}`)
+            .setColor(0x00ff00)
+            .setTimestamp()
+            .setFooter({ text: 'via KlaxyBot' });
+
+        await channel.send({ embeds: [embed] });
+        startupMessageSent = true;
+        console.log('✅ Startup message sent');
+    } catch (error) {
+        console.error('❌ Error sending startup message:', error.message);
     }
 }
 
@@ -104,17 +131,13 @@ async function scrapeAllTelegramChannels() {
         
     } catch (error) {
         console.error('❌ Error scraping Telegram messages:', error.message);
-        
-        // Fallback: send a status message
-        const now = new Date();
-        const timeString = now.toLocaleTimeString();
-        await sendToDiscord(`🔄 KlaxyBot is running - Last check: ${timeString}`, 'System');
+        // Don't send any fallback messages - just log the error
     }
 }
 
 // Main function
 async function startBridge() {
-    console.log('🚀 Starting KlaxBot...');
+    console.log('🚀 Starting Telegram-Discord Bridge...');
     console.log('📢 Monitoring channels:');
     config.telegram.channels.forEach(channel => {
         console.log(`   - ${channel.name} (${channel.id})`);
@@ -125,9 +148,8 @@ async function startBridge() {
         discordClient.on('ready', () => {
             console.log(`✅ Discord bot logged in as ${discordClient.user.tag}`);
             
-            // Send a startup message
-            const channelList = config.telegram.channels.map(ch => ch.name).join(', ');
-            sendToDiscord(`🤖 KlaxyBot is now online!\n📢 Monitoring: ${channelList}`, 'System');
+            // Send startup message only once
+            sendStartupMessage();
             
             // Start checking for messages every 2 minutes
             setInterval(scrapeAllTelegramChannels, 120000);
@@ -135,7 +157,7 @@ async function startBridge() {
 
         await discordClient.login(config.discord.token);
 
-        console.log('🎉 Bridge is running! Monitoring for new messages...');
+        console.log('🎉 KlaxyBot is running! Monitoring for new messages...');
 
         // Keep the process running
         process.on('SIGINT', async () => {
